@@ -6,16 +6,21 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
+import java.sql.Array;
 import java.util.*;
 
 public class SilberMcCoy {
     private IDictionary dict;
     private ArrayList<IWord>[] metachains;
+    private int numChains;
 
     // for each word, track which chains it currently belongs to
-    private HashMap<String, ArrayList<Integer>> wordChains;
+    private HashMap<String, List<Integer>> wordChains;
     public SilberMcCoy(String inputFile) {
         int WN_SIZE = 117798;
+        wordChains = new HashMap<>();
+        numChains = 0;
+
         try {       // open WordNet dictionary
             String wnhome = "./WordNet-3.0";
             String path = wnhome + File.separator + "dict";
@@ -23,7 +28,6 @@ public class SilberMcCoy {
 
             dict = new Dictionary(url);
             dict.open();
-            System.out.println("Dictionary success");
         } catch (IOException e) {
             System.out.println("ERR: " + e.getMessage());
         }
@@ -52,26 +56,34 @@ public class SilberMcCoy {
                 // TODO: update wordChains references
                 if (idxWord != null) {
                     List<IWordID> wordIDs = idxWord.getWordIDs();
-                    int metaIndex = 0;
 
                     for (IWordID i : wordIDs) {
+                        int metaIndex = 0;
                         IWord word = dict.getWord(i);
                         ISenseKey key = word.getSenseKey();
                         // System.out.println(key.getLexicalID() + " " + key.getLemma() + "- " + word.getSynset().getGloss());
 
                         // look for chain starting at metaIndex
                         // chains are added in order, if we reach a chain of size zero, it's a new sense
+                        searchChainSense:
                         while (true) {
-                            if (metachains[metaIndex].size() != 0) {
+                            boolean alrExists = false;
+                            if (!alrExists && metachains[metaIndex].size() != 0) {    // check existing chain
                                 ISenseKey chainSense = metachains[metaIndex].get(0).getSenseKey();
 //                                System.out.println(chainSense.getLexicalID() + " " + key.getLexicalID());
 //                                System.out.println(chainSense.getLemma() + " " + key.getLemma());
-                                if (chainSense.getLexicalID() == key.getLexicalID()
-                                        && chainSense.getLemma().equals(key.getLemma())) {
-                                    metachains[metaIndex].add(word);
-                                    break;
+//                                System.out.println(metaIndex + ": " + chainSense.getLemma() + "/" + key.getLemma());
+//                                System.out.println(metaIndex + ": " + metachains[metaIndex].get(0).getSynset().getID() + "/" + word.getSynset().getID());
+                                if (compareSynsets(metachains[metaIndex].get(0), word)) {
+                                    if (placeWordInChain(metaIndex, word)) {
+                                        break;
+                                    } else {
+                                        alrExists = true;
+                                        break;
+                                    }
                                 }
                             } else {
+                                numChains++;
                                 metachains[metaIndex].add(word);
                                 break;
                             }
@@ -81,6 +93,29 @@ public class SilberMcCoy {
                 }
             }
         }
+    }
+
+    private boolean compareSynsets(IWord chainHead, IWord word) {
+        return chainHead.getSynset().getID().equals(word.getSynset().getID());
+    }
+
+    // check if a word exists in this chain sense
+    private boolean placeWordInChain(int i, IWord word) {
+        String wordtxt = word.getLemma();
+        boolean placed = false;
+        if (!metachains[i].contains(word)) {
+            // System.out.println("Adding to existing chain: " + word.getLemma());
+            metachains[i].add(word);
+            if (wordChains.containsKey(wordtxt)) {
+                wordChains.get(wordtxt).add(i);
+            } else {
+                List<Integer> inChains = new ArrayList<>();
+                inChains.add(i);
+                wordChains.put(wordtxt, inChains);
+            }
+            placed = true;
+        }
+        return placed;
     }
 
     private boolean isSynonym(IWord chainWord, IWord word) {
@@ -108,12 +143,13 @@ public class SilberMcCoy {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("METACHAINS: \n");
+
+        sb.append(numChains + " METACHAINS: \n");
         for (int i = 0; i < metachains.length; i++) {
             if (metachains[i].size() != 0) {
                 sb.append("{");
                 for (IWord word: metachains[i]) {
-                    sb.append(word.getLemma() +",");
+                    sb.append(word.getLexicalID()+ "-" +word.getLemma() +"-"+word.getSynset().getID()+",");
                 }
                 sb.deleteCharAt(sb.length()-1);
                 sb.append("}\n");
@@ -137,7 +173,7 @@ public class SilberMcCoy {
     }
 
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("longing_tagged.txt");
+        SilberMcCoy test = new SilberMcCoy("synonyms_tagged.txt");
         System.out.println(test);
     }
 }
