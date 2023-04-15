@@ -53,7 +53,6 @@ public class SilberMcCoy {
                 String noun = s.split("_")[0];
                 IIndexWord idxWord = dict.getIndexWord(noun, POS.NOUN);
 
-                // TODO: update wordChains references
                 if (idxWord != null) {
                     List<IWordID> wordIDs = idxWord.getWordIDs();
 
@@ -65,22 +64,22 @@ public class SilberMcCoy {
 
                         // look for chain starting at metaIndex
                         // chains are added in order, if we reach a chain of size zero, it's a new sense
-                        searchChainSense:
-                        while (true) {
-                            boolean alrExists = false;
-                            if (!alrExists && metachains[metaIndex].size() != 0) {    // check existing chain
+
+                        boolean placed = false;
+
+                        while (true) {  // search all existing chains
+                            if (metachains[metaIndex].size() != 0) {    // check existing chain
+                                IWord chainHead = metachains[metaIndex].get(0);
                                 ISenseKey chainSense = metachains[metaIndex].get(0).getSenseKey();
 //                                System.out.println(chainSense.getLexicalID() + " " + key.getLexicalID());
 //                                System.out.println(chainSense.getLemma() + " " + key.getLemma());
 //                                System.out.println(metaIndex + ": " + chainSense.getLemma() + "/" + key.getLemma());
 //                                System.out.println(metaIndex + ": " + metachains[metaIndex].get(0).getSynset().getID() + "/" + word.getSynset().getID());
-                                if (compareSynsets(metachains[metaIndex].get(0), word)) {
-                                    if (placeWordInChain(metaIndex, word)) {
-                                        break;
-                                    } else {
-                                        alrExists = true;
-                                        break;
-                                    }
+
+                                if (isSynonym(chainHead, word) || isHypernym(chainHead, word)) {
+                                    placeWordInChain(metaIndex, word);
+                                    placed = true;
+                                    break;
                                 }
                             } else {
                                 numChains++;
@@ -89,43 +88,38 @@ public class SilberMcCoy {
                             }
                             metaIndex++;
                         }
+
+                        if (!placed) {      // could not be placed into existing chain, create new
+                            numChains++;
+                            metachains[metaIndex].add(word);
+
+                        }
                     }
                 }
             }
         }
     }
 
-    private boolean compareSynsets(IWord chainHead, IWord word) {
-        return chainHead.getSynset().getID().equals(word.getSynset().getID());
+    private void updateWordChains(int i, IWord word) {
+        String wordtxt = word.getLemma();
+        if (!wordChains.containsKey(wordtxt)) {
+            List<Integer> inChains = new ArrayList<>();
+            inChains.add(i);
+            wordChains.put(wordtxt, inChains);
+        } else if (!wordChains.get(wordtxt).contains(i)){
+            wordChains.get(wordtxt).add(i);
+        }
     }
 
     // check if a word exists in this chain sense
-    private boolean placeWordInChain(int i, IWord word) {
-        String wordtxt = word.getLemma();
-        boolean placed = false;
-        if (!metachains[i].contains(word)) {
-            // System.out.println("Adding to existing chain: " + word.getLemma());
-            metachains[i].add(word);
-            if (wordChains.containsKey(wordtxt)) {
-                wordChains.get(wordtxt).add(i);
-            } else {
-                List<Integer> inChains = new ArrayList<>();
-                inChains.add(i);
-                wordChains.put(wordtxt, inChains);
-            }
-            placed = true;
-        }
-        return placed;
+    // could check for chain index in HashMap instead
+    private void placeWordInChain(int i, IWord word) {
+        metachains[i].add(word);
+        updateWordChains(i, word);
     }
 
     private boolean isSynonym(IWord chainWord, IWord word) {
-        ISynset checkSet = chainWord.getSynset();
-        for (IWord w: checkSet.getWords()) {
-            if (w.equals(word)) {
-                return true;
-            }
-        }
-        return false;
+        return chainWord.getSynset().getID() == word.getSynset().getID();
     }
 
     private boolean isHypernym(IWord chainWord, IWord word) {
