@@ -21,18 +21,9 @@ public class SilberMcCoy {
         wordChains = new HashMap<>();
         numChains = 0;
 
-        try {       // open WordNet dictionary
-            String wnhome = "./WordNet-3.0";
-            String path = wnhome + File.separator + "dict";
-            URL url = new URL("file", null, path);
+        openDict();
 
-            dict = new Dictionary(url);
-            dict.open();
-        } catch (IOException e) {
-            System.out.println("ERR: " + e.getMessage());
-        }
-
-        List<String> fileWords = new ArrayList<String>();
+        List<String> fileWords = new ArrayList<>();
         try {       // scan from POS-tagged file
             Scanner sc = new Scanner(new File(inputFile));
             while (sc.hasNext()) {
@@ -48,6 +39,7 @@ public class SilberMcCoy {
             metachains[i] = new ArrayList<IWord>();
         }
 
+        int sentNum = 1;
         for (String s : fileWords) {
             if (isNoun(s)) {
                 String noun = s.split("_")[0];
@@ -66,7 +58,6 @@ public class SilberMcCoy {
                         // chains are added in order, if we reach a chain of size zero, it's a new sense
 
                         boolean placed = false;
-
                         while (true) {  // search all existing chains
                             if (metachains[metaIndex].size() != 0) {    // check existing chain
                                 IWord chainHead = metachains[metaIndex].get(0);
@@ -96,8 +87,27 @@ public class SilberMcCoy {
                         }
                     }
                 }
+            } else if (isPunctuation(s)) {
+                sentNum++;
             }
         }
+    }
+
+    private void openDict() {
+        try {       // open WordNet dictionary
+            String wnhome = "./WordNet-3.0";
+            String path = wnhome + File.separator + "dict";
+            URL url = new URL("file", null, path);
+
+            dict = new Dictionary(url);
+            dict.open();
+        } catch (IOException e) {
+            System.out.println("ERR: " + e.getMessage());
+        }
+    }
+
+    private boolean isPunctuation(String str) {
+        return str.matches(".*_.");
     }
 
     private void updateWordChains(int i, IWord word) {
@@ -111,8 +121,6 @@ public class SilberMcCoy {
         }
     }
 
-    // check if a word exists in this chain sense
-    // could check for chain index in HashMap instead
     private void placeWordInChain(int i, IWord word) {
         metachains[i].add(word);
         updateWordChains(i, word);
