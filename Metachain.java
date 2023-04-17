@@ -6,16 +6,16 @@ import java.util.Map;
 
 // For usage in the Silber and McCoy algorithm
 public class Metachain {
-    private ArrayList<WordNode> chain;
+    public ArrayList<WordNode> chain;
+    public ISynsetID headSense;
     private double strengthScore;
-
-    public Metachain() {
-        strengthScore = 0;
-        chain = new ArrayList<>();
-    }
+    private int size;
 
     public Metachain(WordNode wn) {
-        new Metachain();
+        headSense = wn.word.getSynset().getID();
+        size = 1;
+        strengthScore = 1;
+        chain = new ArrayList<>();
         chain.add(wn);
     }
 
@@ -23,9 +23,14 @@ public class Metachain {
         return strengthScore;
     }
 
-    public void insertWord(WordNode chainWord, WordNode word) {
+    public int getSize() {
+        return size;
+    }
+
+    public void insertWord(WordNode chainWord , WordNode word, double score) {
         chain.add(word);
-        strengthScore += chainWord.computeDist(word);
+        size++;
+        strengthScore += score;
     }
 
     public String toString() {
