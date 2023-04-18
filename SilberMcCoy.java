@@ -25,8 +25,6 @@ public class SilberMcCoy {
         constructMetachains(sc);
 
         System.out.println("FINISHED CONSTRUCTION");
-        System.out.println(this);
-        System.out.println();
 
         // Second pass *through nouns list*: chain culling
         for (WordInstance inst: nouns) {
@@ -38,7 +36,7 @@ public class SilberMcCoy {
                 }
             }
         }
-        System.out.println("FINISHED CULLING: ");
+        System.out.println("FINISHED CULLING");
         System.out.println(nonZeroChains());
     }
 
@@ -66,7 +64,18 @@ public class SilberMcCoy {
             String str = sc.next();
 
             if (isNoun(str)) {
-                String noun = str.split("_")[0];
+                String noun;
+                String[] split = str.split("_");
+                if (split.length == 2) {
+                    noun = split[0];
+                } else {
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < split.length - 1; i++) {
+                        sb.append(split[i] + " ");
+                    }
+                    sb.deleteCharAt(sb.length() - 1);
+                    noun = sb.toString();
+                }
                 IIndexWord idxWord = dict.getIndexWord(noun, POS.NOUN);
 
                 if (idxWord != null) {
@@ -115,14 +124,21 @@ public class SilberMcCoy {
     }
 
     private boolean isNoun(String s) {
-        String[] nounTags = {"NN", "NNS", "NNP", "NNPS"};
         String[] split = s.split("_");
         String tag = split[split.length - 1];
 
-        for (String t: nounTags) {
-            if (tag.equals(t)) {
-                return true;
-            }
+        if (tag.equals("NN") || tag.equals("NNS") || tag.equals("NNP") || tag.equals("NNPS")) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isProperNoun(String s) {
+        String[] split = s.split("_");
+        String tag = split[split.length - 1];
+
+        if (tag.equals("NNP") || tag.equals("NNPS")) {
+            return true;
         }
         return false;
     }
@@ -254,8 +270,42 @@ public class SilberMcCoy {
         return sb.toString();
     }
 
+    public List<Metachain> getStrongChains() {
+        List<Metachain> strong = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Metachain c: metachains) {
+            scores.add(c.strengthScore);
+        }
+
+        double stdev = getStandardDeviation(scores);
+        double mean = getMean(scores);
+        for (int i = 0; i < metachains.size(); i++) {
+            if (metachains.get(i).strengthScore - mean > 2*stdev) {
+                strong.add(metachains.get(i));
+            }
+        }
+
+        return strong;
+    }
+
+    private double getStandardDeviation(List<Double> scores) {
+        double mean = getMean(scores);
+        double result = 0.0;
+        for (double s: scores) {
+            result += Math.pow((s - mean), 2);
+        }
+        return Math.sqrt(result/scores.size());
+    }
+
+    private double getMean(List<Double> scores) {
+        return scores.stream()
+                .mapToDouble(d -> d)
+                .average()
+                .orElse(-1.0);
+    }
+
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("nyc_rat_tagged.txt");
+        SilberMcCoy test = new SilberMcCoy("nyc_rat_handtagged.txt");
         System.out.println();
         System.out.println("Nouns: " + test.nouns.size());
     }
