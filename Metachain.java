@@ -6,7 +6,7 @@ import java.util.ArrayList;
 public class Metachain {
     public ArrayList<MetaWordNode> chain;
     public ISynsetID headSense;
-    private double strengthScore;
+    public double strengthScore;
     private int size;
 
     public Metachain(MetaWordNode wn) {

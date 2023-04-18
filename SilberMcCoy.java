@@ -8,63 +8,92 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 
+/*
+    POS tagger command: ./stanford-postagger.sh models/english-bidirectional-distsim.tagger nyc_rat.txt > nyc_rat_tagged.txt
+ */
 public class SilberMcCoy {
     private IDictionary dict;
-    private final ArrayList<Metachain> metachains;
+    private ArrayList<Metachain> metachains;
     private int numChains;
     private Map<MetaWordNode, List<Integer>> nodeChains;
     public ArrayList<WordInstance> nouns;
 
     public SilberMcCoy(String inputFile) {
+        initializeAlgo();
+        // First pass through document: construct metachains
+        Scanner sc = openScanner(inputFile);
+        constructMetachains(sc);
+
+        System.out.println("FINISHED CONSTRUCTION");
+        System.out.println(this);
+        System.out.println();
+
+        // Second pass *through nouns list*: chain culling
+        for (WordInstance inst: nouns) {
+            for (MetaWordNode metaNode: inst.getMetaInstances()) {
+                if (metaNode != inst.getBestContribution()) {
+                    double score = metaNode.score;
+                    metachains.get(metaNode.chainNum).strengthScore = metachains.get(metaNode.chainNum).strengthScore - score;
+                    metaNode.score = 0.0;
+                }
+            }
+        }
+        System.out.println("FINISHED CULLING: ");
+        System.out.println(nonZeroChains());
+    }
+
+    private void initializeAlgo() {
         numChains = 0;
         metachains = new ArrayList<>();
         nodeChains = new HashMap<>();
         nouns = new ArrayList<>();
         openDict();
+    }
 
-        int sentNum = 1;    // starting at the first sentence, construct metachains
+    private Scanner openScanner(String inputFile) {
         try {
             Scanner sc = new Scanner(new File(inputFile));
-            while (sc.hasNext()) {
-                String str = sc.next();
-
-                if (isNoun(str)) {
-                    String noun = str.split("_")[0];
-                    IIndexWord idxWord = dict.getIndexWord(noun, POS.NOUN);
-
-                    if (idxWord != null) {
-                        List<IWordID> wordSenses = idxWord.getWordIDs();
-                        WordInstance instance = new WordInstance(idxWord, sentNum);
-
-                        // for each sense of this noun, insert into as many chains as possible
-                        MetaWordNode bestNode = null;
-                        for (IWordID id : wordSenses) {
-                            IWord word = dict.getWord(id);
-                            MetaWordNode currNode = addNodeToChains(instance, word, sentNum);
-
-                            if (nodeExists(currNode)) {
-                                bestNode = getStrongerNode(bestNode, currNode);
-                            } else {    // word sense does not belong in existing chains, create new chain
-                                createNewChain(new MetaWordNode(sentNum, word));
-                            }
-                        }
-
-                        instance.setBestNode(bestNode);
-                        nouns.add(instance);
-                    }
-                } else if (isPunctuation(str)) {
-                    sentNum++;
-                }
-            }
+            return sc;
         } catch (FileNotFoundException e) {
             System.out.println("ERR: " + e.getMessage());
         }
+        return null;
+    }
 
-        // chain culling
-        try {
-            Scanner sc = new Scanner(new File(inputFile));
-        } catch (FileNotFoundException e) {
-            System.out.println("ERR: " + e.getMessage());
+    private void constructMetachains(Scanner sc) {
+        int sentNum = 1;
+        while (sc.hasNext()) {
+            String str = sc.next();
+
+            if (isNoun(str)) {
+                String noun = str.split("_")[0];
+                IIndexWord idxWord = dict.getIndexWord(noun, POS.NOUN);
+
+                if (idxWord != null) {
+                    List<IWordID> wordSenses = idxWord.getWordIDs();
+                    WordInstance instance = new WordInstance(idxWord, sentNum);
+
+                    // for each sense of this noun, insert into as many chains as possible
+                    MetaWordNode bestNode = null;
+                    for (IWordID id : wordSenses) {
+                        IWord word = dict.getWord(id);
+                        MetaWordNode currNode = addNodeToChains(instance, word, sentNum);
+
+                        if (nodeExists(currNode)) {
+                            bestNode = getStrongerNode(bestNode, currNode);
+                        } else {    // word sense does not belong in existing chains, create new chain
+                            currNode = new MetaWordNode(sentNum, word);
+                            createNewChain(currNode);
+                        }
+                        instance.addMetaInstance(currNode);
+                    }
+
+                    instance.setBestNode(bestNode);
+                    nouns.add(instance);
+                }
+            } else if (isPunctuation(str)) {
+                sentNum++;
+            }
         }
     }
 
@@ -73,7 +102,7 @@ public class SilberMcCoy {
     }
 
     private void openDict() {
-        try {       // open WordNet dictionary
+        try {
             String wnhome = "./WordNet-3.0";
             String path = wnhome + File.separator + "dict";
             URL url = new URL("file", null, path);
@@ -113,6 +142,7 @@ public class SilberMcCoy {
             // First, check for sense relations
             if (isSynonym(c.headSense, currID) || isHyperHypo(c.headSense, currID)) {
                 MetaWordNode newNode = new MetaWordNode(sentNum, word);
+                newNode.chainNum = i;
 
                 // find the NEAREST-IN-TEXT related word and compute the score
                 for (int n = c.getSize() - 1; n >= 0; n--) {
@@ -210,13 +240,23 @@ public class SilberMcCoy {
         return sb.toString();
     }
 
+    public String nonZeroChains() {
+        StringBuilder sb = new StringBuilder();
+        int numChains = 0;
+
+        for (Metachain c: metachains) {
+            if (c.strengthScore != 1.0) {
+                numChains++;
+                sb.append(c.toString() + "\n");
+            }
+        }
+        sb.append(numChains + " METACHAINS: \n");
+        return sb.toString();
+    }
+
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("test_3_tagged.txt");
-        System.out.println(test);
+        SilberMcCoy test = new SilberMcCoy("nyc_rat_tagged.txt");
         System.out.println();
         System.out.println("Nouns: " + test.nouns.size());
-//        for (WordInstance wi: test.nouns) {
-//            System.out.println(wi.toString());
-//        }
     }
 }
