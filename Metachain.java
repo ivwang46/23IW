@@ -1,17 +1,15 @@
 import edu.mit.jwi.item.*;
 
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 // For usage in the Silber and McCoy algorithm
 public class Metachain {
-    public ArrayList<WordNode> chain;
+    public ArrayList<MetaWordNode> chain;
     public ISynsetID headSense;
     private double strengthScore;
     private int size;
 
-    public Metachain(WordNode wn) {
+    public Metachain(MetaWordNode wn) {
         headSense = wn.word.getSynset().getID();
         size = 1;
         strengthScore = 1;
@@ -27,7 +25,7 @@ public class Metachain {
         return size;
     }
 
-    public void insertWord(WordNode chainWord , WordNode word, double score) {
+    public void insertWord(MetaWordNode chainWord , MetaWordNode word, double score) {
         chain.add(word);
         size++;
         strengthScore += score;
@@ -36,7 +34,7 @@ public class Metachain {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(strengthScore + ": {");
-        for (WordNode wn: chain) {
+        for (MetaWordNode wn: chain) {
             sb.append(wn.toString()+",");
         }
         sb.deleteCharAt(sb.length() - 1);
