@@ -24,7 +24,7 @@ public class SilberMcCoy {
         Scanner sc = openScanner(inputFile);
         constructMetachains(sc);
 
-        System.out.println("FINISHED CONSTRUCTION");
+        // System.out.println("FINISHED CONSTRUCTION");
 
         // Second pass *through nouns list*: chain culling
         for (WordInstance inst: nouns) {
@@ -36,8 +36,8 @@ public class SilberMcCoy {
                 }
             }
         }
-        System.out.println("FINISHED CULLING");
-        System.out.println(nonZeroChains());
+        // System.out.println("FINISHED CULLING");
+        // System.out.println(nonZeroChains());
     }
 
     private void initializeAlgo() {
@@ -280,7 +280,7 @@ public class SilberMcCoy {
         double stdev = getStandardDeviation(scores);
         double mean = getMean(scores);
         for (int i = 0; i < metachains.size(); i++) {
-            if (metachains.get(i).strengthScore - mean > 2*stdev) {
+            if (metachains.get(i).strengthScore - mean > stdev) {
                 strong.add(metachains.get(i));
             }
         }
