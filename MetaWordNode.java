@@ -11,9 +11,10 @@ import java.util.List;
 
 public class MetaWordNode {
     public final IWord word;
+    private final int sentNum;
     public double score;
     public int chainNum;
-    private final int sentNum;
+
 
 
     public MetaWordNode(int sentNum, IWord word) {
@@ -22,9 +23,6 @@ public class MetaWordNode {
     }
 
     public boolean isSynonym(ISynsetID headSense) {
-//        System.out.print(headSense);
-//        System.out.print(" " + this.word.getSynset().getID());
-//        System.out.println();
         return headSense.equals(this.word.getSynset().getID());
     }
 
@@ -59,12 +57,26 @@ public class MetaWordNode {
         return false;
     }
 
+    public boolean isSibling(IDictionary dict, ISynsetID sense) {
+        ISynset thisSet = this.word.getSynset();
+        List<ISynsetID> hypernyms1 = thisSet.getRelatedSynsets(Pointer.HYPERNYM);
+        List<ISynsetID> hypernyms2 = dict.getSynset(sense).getRelatedSynsets(Pointer.HYPERNYM);
+        for (ISynsetID h1: hypernyms1) {
+            for (ISynsetID h2: hypernyms2) {
+                if (h1.equals(h2)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public int getSentNum() {
         return sentNum;
     }
 
     public String toString() {
-        return word.getLemma() + "-" + word.getSynset().getID();
+        return score+"-"+word.getLemma() + "-" + word.getSynset().getID();
     }
 
     public int computeDist(MetaWordNode laterNode) {

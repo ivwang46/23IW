@@ -2,6 +2,7 @@ import edu.mit.jwi.Dictionary;
 import edu.mit.jwi.IDictionary;
 import edu.mit.jwi.item.*;
 
+import javax.sound.midi.MetaEventListener;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -14,36 +15,48 @@ import java.util.*;
 public class SilberMcCoy {
     private IDictionary dict;
     private ArrayList<Metachain> metachains;
-    private int numChains;
-    private Map<MetaWordNode, List<Integer>> nodeChains;
     public ArrayList<WordInstance> nouns;
 
     public SilberMcCoy(String inputFile) {
         initializeAlgo();
         // First pass through document: construct metachains
         Scanner sc = openScanner(inputFile);
+        System.out.println("Begin");
         constructMetachains(sc);
 
-        // System.out.println("FINISHED CONSTRUCTION");
+        System.out.println("FINISHED CONSTRUCTION");
+        System.out.println(this);
+        System.out.println();
 
         // Second pass *through nouns list*: chain culling
         for (WordInstance inst: nouns) {
             for (MetaWordNode metaNode: inst.getMetaInstances()) {
                 if (metaNode != inst.getBestContribution()) {
                     double score = metaNode.score;
-                    metachains.get(metaNode.chainNum).strengthScore = metachains.get(metaNode.chainNum).strengthScore - score;
+                    Metachain c = metachains.get(metaNode.chainNum);
+                    c.strengthScore = c.strengthScore - score;
                     metaNode.score = 0.0;
                 }
             }
         }
-        // System.out.println("FINISHED CULLING");
-        // System.out.println(nonZeroChains());
+
+        System.out.println("FINISHED CULLING");
+        System.out.println(nonZeroChains());
+        System.out.println("\n");
+
+//        for (WordInstance wi: nouns) {
+//            System.out.println(wi);
+//        }
+
+        System.out.println("Strong Chains: ");
+        List<Metachain> strongChains = getStrongChains();
+        for (Metachain c: strongChains) {
+            System.out.println(c);
+        }
     }
 
     private void initializeAlgo() {
-        numChains = 0;
         metachains = new ArrayList<>();
-        nodeChains = new HashMap<>();
         nouns = new ArrayList<>();
         openDict();
     }
@@ -59,6 +72,7 @@ public class SilberMcCoy {
     }
 
     private void constructMetachains(Scanner sc) {
+        System.out.println("Begin scanning file");
         int sentNum = 1;
         while (sc.hasNext()) {
             String str = sc.next();
@@ -83,21 +97,10 @@ public class SilberMcCoy {
                     WordInstance instance = new WordInstance(idxWord, sentNum);
 
                     // for each sense of this noun, insert into as many chains as possible
-                    MetaWordNode bestNode = null;
                     for (IWordID id : wordSenses) {
                         IWord word = dict.getWord(id);
-                        MetaWordNode currNode = addNodeToChains(instance, word, sentNum);
-
-                        if (nodeExists(currNode)) {
-                            bestNode = getStrongerNode(bestNode, currNode);
-                        } else {    // word sense does not belong in existing chains, create new chain
-                            currNode = new MetaWordNode(sentNum, word);
-                            createNewChain(currNode);
-                        }
-                        instance.addMetaInstance(currNode);
+                        insertSenseIntoChains(instance, word, sentNum);
                     }
-
-                    instance.setBestNode(bestNode);
                     nouns.add(instance);
                 }
             } else if (isPunctuation(str)) {
@@ -147,52 +150,82 @@ public class SilberMcCoy {
         return str.matches(".*_.");
     }
 
-    // iterate through all existing chains, insert new node where it fits
-    // returns {bestScore, bestChainIndex} or {Double.NEGATIVE_INFINITY, -1}
-    private MetaWordNode addNodeToChains(WordInstance parent, IWord word, int sentNum) {
-        MetaWordNode best = null;
-        for (int i = 0; i < numChains; i++) {
+    private void insertSenseIntoChains(WordInstance parent, IWord word, int sentNum) {
+        MetaWordNode newNode = new MetaWordNode(sentNum, word);
+        boolean inserted = false;
+
+        for (int i = 0; i < metachains.size(); i++) {
             Metachain c = metachains.get(i);
             ISynsetID currID = word.getSynset().getID();
 
-            // First, check for sense relations
-            if (isSynonym(c.headSense, currID) || isHyperHypo(c.headSense, currID)) {
-                MetaWordNode newNode = new MetaWordNode(sentNum, word);
-                newNode.chainNum = i;
-
-                // find the NEAREST-IN-TEXT related word and compute the score
-                for (int n = c.getSize() - 1; n >= 0; n--) {
-                    MetaWordNode chainNode = c.chain.get(n);
-                    int dist = chainNode.computeDist(newNode);
-
-                    double currScore = computeRelationScore(chainNode, c.headSense, dist);
-                    if (currScore != Double.NEGATIVE_INFINITY) {    // belongs to chain
-                        newNode.score = currScore;
-                        c.insertWord(chainNode, newNode, currScore);
-                        parent.addMetaInstance(newNode);
-                        // check score
-                        if (best == null || best.score < currScore) {
-                            best = newNode;
-                        }
-                        break;
-                    }
-                }
+            // Check relation with senses of existing chains
+            if (isSynonym(c.headSense, currID)) {
+                inserted = true;
+                insertIntoChain(parent, newNode, i, c);
+            } else if (isHypernym(c.headSense, currID)) {
+                insertIntoChain(parent, newNode, i, c);
             }
         }
-        return best;
+        // Create a new chain for this sense, if not found
+        if (!inserted) {
+            MetaWordNode startNewChain = new MetaWordNode(sentNum, word);
+            createNewChain(startNewChain);
+            parent.addMetaInstance(startNewChain);
+            updateBest(parent, startNewChain);
+        }
+    }
+
+    private void insertIntoChain(WordInstance parent, MetaWordNode node, int chainIndex, Metachain c) {
+        node.chainNum = chainIndex;
+
+        // find nearest node + calculate relation score
+        for (int i = c.getSize() - 1; i >= 0; i--) {
+            MetaWordNode currChainNode = c.chain.get(i);
+            int dist = currChainNode.computeDist(node);
+            double currScore = computeSMCoyScore(currChainNode, node, dist);
+
+            if (currScore != Double.NEGATIVE_INFINITY) {
+                node.score = currScore;
+
+                c.insertWord(node, currScore);
+                parent.addMetaInstance(node);
+                updateBest(parent, node);
+                break;
+            }
+        }
+    }
+
+    private void updateBest(WordInstance parent, MetaWordNode node) {
+        MetaWordNode currBest = parent.getBestContribution();
+        if (currBest == null) {
+            parent.setBestNode(node);
+        } else if (currBest.score < node.score) {
+            parent.setBestNode(node);
+        } else if (currBest.score == node.score) {
+            ISynsetID curr = currBest.word.getSynset().getID();
+            ISynsetID compare = node.word.getSynset().getID();
+            if (curr.toString().compareTo(compare.toString()) < 0) {
+                parent.setBestNode(node);
+            }
+        }
     }
 
     private boolean isSynonym(ISynsetID s1, ISynsetID s2) {
         return s1.equals(s2);
     }
 
-    private boolean isHyperHypo(ISynsetID s1, ISynsetID s2) {
-        List<ISynsetID> hypernyms = dict.getSynset(s1).getRelatedSynsets(Pointer.HYPERNYM);
+    private boolean isHypernym(ISynsetID chain, ISynsetID node) {
+        List<ISynsetID> hypernyms = dict.getSynset(chain).getRelatedSynsets(Pointer.HYPERNYM);
         for (ISynsetID h: hypernyms) {
-            if (h.equals(s2)) {
+            if (h.equals(node)) {
                 return true;
             }
         }
+        return false;
+    }
+
+    private boolean isHyperHypo(ISynsetID s1, ISynsetID s2) {
+        isHypernym(s1, s2);
 
         List<ISynsetID> hyponyms = dict.getSynset(s1).getRelatedSynsets(Pointer.HYPONYM);
         for (ISynsetID h: hyponyms) {
@@ -203,36 +236,61 @@ public class SilberMcCoy {
         return false;
     }
 
-    private double computeRelationScore(MetaWordNode chainNode, ISynsetID headSense, int dist) {
-        // 1. Identity or Synonym Relation
-        if (chainNode.isSynonym(headSense)) {
-            if (dist <= 3) {
-                return 1.0;
-            } else {
-                return 0.0;
-            }
-            // 2. Hypernym Relation
-        } else if (chainNode.isHyperHypo(dict, headSense)){
-            if (dist <= 3) {
-                if (dist <= 1) {
-                    return 1.0;
-                } else {
-                    return 0.5;
+    private boolean isSibling(ISynsetID s1, ISynsetID s2) {
+        List<ISynsetID> hypernym1 = dict.getSynset(s1).getRelatedSynsets(Pointer.HYPERNYM);
+        List<ISynsetID> hypernym2 = dict.getSynset(s2).getRelatedSynsets(Pointer.HYPERNYM);
+        for (ISynsetID id1 : hypernym1) {
+            for (ISynsetID id2 : hypernym2) {
+                if (id1.equals(id2)) {
+                    // System.out.println(id1.toString() + "-" + id2);
+                    return true;
                 }
-            } else {
-                return 0.0;
             }
+        }
+        return false;
+    }
+
+    private double computeSMCoyScore(MetaWordNode chainNode, MetaWordNode newNode, int dist) {
+        double factor;
+        // 1. Identity or Synonym Relation
+        if (chainNode.isSynonym(newNode.word.getSynset().getID())) {
+            if (dist <= 3) {
+                factor = 1.0;
+            } else {
+                factor = 0.0;
+            }
+            return factor;
+            // return factor*length + chainNode.score;
+            // 2. Hypernym Relation
+        } else if (chainNode.isHyperHypo(dict, newNode.word.getSynset().getID())){
+            if (dist <= 1) {
+                factor = 1.0;
+            } else if (dist <= 3) {
+                factor = 0.5;
+            } else {
+                factor = 0.0;
+            }
+            // return factor*length + chainNode.score;
+            return factor;
+        } else if (chainNode.isSibling(dict, newNode.word.getSynset().getID())) {
+            if (dist <= 1) {
+                factor = 1.0;
+            } else if (dist <= 3) {
+                factor = 0.3;
+            } else {
+                factor = 0.0;
+            }
+            // return factor*length + chainNode.score;
+            return factor;
         }
         return Double.NEGATIVE_INFINITY;
     }
 
     private void createNewChain(MetaWordNode curr) {
         Metachain newChain = new Metachain(curr);
+        curr.score = 1.0;
+        curr.chainNum = metachains.size();
         metachains.add(newChain);
-        List<Integer> newList = new ArrayList<>();
-        newList.add(numChains);
-        numChains++;
-        nodeChains.put(curr, newList);
     }
 
     private MetaWordNode getStrongerNode(MetaWordNode currBest, MetaWordNode check) {
@@ -242,14 +300,14 @@ public class SilberMcCoy {
             if (currBest.score < check.score) {
                 return check;
             }
+            return currBest;
         }
-        return currBest;
     }
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
 
-        sb.append(numChains + " METACHAINS: \n");
+        sb.append(metachains.size() + " METACHAINS: \n");
         for (Metachain c: metachains) {
             sb.append(c.toString() + "\n");
         }
@@ -261,7 +319,7 @@ public class SilberMcCoy {
         int numChains = 0;
 
         for (Metachain c: metachains) {
-            if (c.strengthScore != 1.0) {
+            if (c.strengthScore != 0.0) {
                 numChains++;
                 sb.append(c.toString() + "\n");
             }
@@ -273,6 +331,7 @@ public class SilberMcCoy {
     public List<Metachain> getStrongChains() {
         List<Metachain> strong = new ArrayList<>();
         List<Double> scores = new ArrayList<>();
+        // this is done post culling, lots of zeroes
         for (Metachain c: metachains) {
             scores.add(c.strengthScore);
         }
@@ -280,7 +339,7 @@ public class SilberMcCoy {
         double stdev = getStandardDeviation(scores);
         double mean = getMean(scores);
         for (int i = 0; i < metachains.size(); i++) {
-            if (metachains.get(i).strengthScore - mean > stdev) {
+            if (metachains.get(i).strengthScore - mean > 2*stdev) {
                 strong.add(metachains.get(i));
             }
         }
@@ -305,7 +364,7 @@ public class SilberMcCoy {
     }
 
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("nyc_rat_handtagged.txt");
+        SilberMcCoy test = new SilberMcCoy("fox_dominion_tagged.txt");
         System.out.println();
         System.out.println("Nouns: " + test.nouns.size());
     }

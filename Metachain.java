@@ -7,11 +7,9 @@ public class Metachain {
     public ArrayList<MetaWordNode> chain;
     public ISynsetID headSense;
     public double strengthScore;
-    private int size;
 
     public Metachain(MetaWordNode wn) {
         headSense = wn.word.getSynset().getID();
-        size = 1;
         strengthScore = 1;
         chain = new ArrayList<>();
         chain.add(wn);
@@ -22,12 +20,11 @@ public class Metachain {
     }
 
     public int getSize() {
-        return size;
+        return chain.size();
     }
 
-    public void insertWord(MetaWordNode chainWord , MetaWordNode word, double score) {
+    public void insertWord(MetaWordNode word, double score) {
         chain.add(word);
-        size++;
         strengthScore += score;
     }
 
@@ -35,7 +32,8 @@ public class Metachain {
         StringBuilder sb = new StringBuilder();
         sb.append(strengthScore + ": {");
         for (MetaWordNode wn: chain) {
-            sb.append(wn.toString()+",");
+            // if (wn.score != 0.0) sb.append(wn+",");
+            sb.append(wn+",");
         }
         sb.deleteCharAt(sb.length() - 1);
         sb.append("}");

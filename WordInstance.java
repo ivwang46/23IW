@@ -46,7 +46,8 @@ public class WordInstance {
     public String toString() {
         StringBuilder sb = new StringBuilder("Word Instance: " + idxWord.getLemma() + "\n");
         sb.append("Found in sentence number: " + sentNum + "\n");
-        sb.append("Initial metanodes: " + metaInstances.size());
+        sb.append("Initial metanodes: " + metaInstances.size() + "\n");
+        sb.append("Best Node: " + bestContribution + " in chain # " + bestContribution.chainNum);
         return sb.toString();
     }
 }
