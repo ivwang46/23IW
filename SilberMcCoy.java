@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 /*
@@ -14,19 +16,31 @@ import java.util.*;
  */
 public class SilberMcCoy {
     private IDictionary dict;
-    private ArrayList<Metachain> metachains;
     public ArrayList<WordInstance> nouns;
+    private final double constructionTime;
+    private List<Metachain> metachains;
+    private final List<Metachain> strongChains;
+    private final int numMetachains;
+    private final int numChains;
+    private final int numStrongChains;
+
+    private double avgScore = 0.0;
+    private double stdevScore = Double.NEGATIVE_INFINITY;
+    private final int longestChain;
+    private final double avgLength;
 
     public SilberMcCoy(String inputFile) {
         initializeAlgo();
         // First pass through document: construct metachains
         Scanner sc = openScanner(inputFile);
         System.out.println("Begin");
+        Instant start = Instant.now();
         constructMetachains(sc);
+        numMetachains = metachains.size();
 
-        System.out.println("FINISHED CONSTRUCTION");
-        System.out.println(this);
-        System.out.println();
+//        System.out.println("FINISHED CONSTRUCTION: " + metachains.size() + "metachains");
+//        System.out.println(this);
+//        System.out.println();
 
         // Second pass *through nouns list*: chain culling
         for (WordInstance inst: nouns) {
@@ -34,25 +48,51 @@ public class SilberMcCoy {
                 if (metaNode != inst.getBestContribution()) {
                     double score = metaNode.score;
                     Metachain c = metachains.get(metaNode.chainNum);
+                    c.chain.remove(metaNode);
                     c.strengthScore = c.strengthScore - score;
-                    metaNode.score = 0.0;
                 }
             }
         }
+        Instant end = Instant.now();
 
-        System.out.println("FINISHED CULLING");
-        System.out.println(nonZeroChains());
-        System.out.println("\n");
-
-//        for (WordInstance wi: nouns) {
-//            System.out.println(wi);
-//        }
-
-        System.out.println("Strong Chains: ");
-        List<Metachain> strongChains = getStrongChains();
-        for (Metachain c: strongChains) {
-            System.out.println(c);
+        // Metachains -> chains
+        double largest = Double.NEGATIVE_INFINITY;
+        int lengthSum = 0;
+        List<Metachain> finalChains = new ArrayList<>();
+        for (Metachain c: metachains) {
+            int currSize = c.chain.size();
+            if (currSize > 0) {
+                lengthSum += currSize;
+                finalChains.add(c);
+                if ((double) currSize > largest) {
+                    largest = c.chain.size();
+                }
+            }
         }
+        metachains = finalChains;
+        numChains = metachains.size();
+        avgLength = lengthSum/(double)metachains.size();
+        longestChain = (int) largest;
+        System.out.println(this);
+
+
+        computeFinalChains();
+        System.out.println("Strong Chains: ");
+        strongChains = getStrongChains();
+        numStrongChains = strongChains.size();
+        System.out.println(strongToString());
+        System.out.println();
+
+        constructionTime = Duration.between(start, end).toMillis();
+        System.out.println(constructionTime + " milliseconds elapsed");
+    }
+
+    public List<Metachain> getMetachains() {
+        return metachains;
+    }
+
+    public int getNumNounsFound() {
+        return nouns.size();
     }
 
     private void initializeAlgo() {
@@ -126,6 +166,10 @@ public class SilberMcCoy {
         }
     }
 
+    public double getConstructionTime() {
+        return constructionTime;
+    }
+
     private boolean isNoun(String s) {
         String[] split = s.split("_");
         String tag = split[split.length - 1];
@@ -147,7 +191,7 @@ public class SilberMcCoy {
     }
 
     private boolean isPunctuation(String str) {
-        return str.matches(".*_.");
+        return str.charAt(str.length() - 1) == '.';
     }
 
     private void insertSenseIntoChains(WordInstance parent, IWord word, int sentNum) {
@@ -336,10 +380,8 @@ public class SilberMcCoy {
             scores.add(c.strengthScore);
         }
 
-        double stdev = getStandardDeviation(scores);
-        double mean = getMean(scores);
         for (int i = 0; i < metachains.size(); i++) {
-            if (metachains.get(i).strengthScore - mean > 2*stdev) {
+            if (metachains.get(i).strengthScore - avgScore > 2*stdevScore) {
                 strong.add(metachains.get(i));
             }
         }
@@ -347,25 +389,45 @@ public class SilberMcCoy {
         return strong;
     }
 
-    private double getStandardDeviation(List<Double> scores) {
-        double mean = getMean(scores);
-        double result = 0.0;
-        for (double s: scores) {
-            result += Math.pow((s - mean), 2);
+    public String strongToString() {
+        StringBuilder sb = new StringBuilder();
+        for (Metachain c: strongChains) {
+            sb.append("\n"+c);
         }
-        return Math.sqrt(result/scores.size());
+        return sb.toString();
     }
 
-    private double getMean(List<Double> scores) {
-        return scores.stream()
-                .mapToDouble(d -> d)
-                .average()
-                .orElse(-1.0);
+    private void computeFinalChains() {
+        double totalScores = 0.0;
+        for (Metachain c: metachains) {
+            totalScores += c.strengthScore;
+        }
+        computeMean(totalScores);
+        computeScoreStdev();
+    }
+
+    private void computeScoreStdev() {
+        double result = 0.0;
+        for (Metachain c: metachains) {
+            result += Math.pow((c.strengthScore - avgScore), 2);
+        }
+        stdevScore = Math.sqrt(result/metachains.size());
+    }
+
+    private void computeMean(double totalScores) {
+        avgScore = totalScores/metachains.size();
+    }
+
+    public String dataToString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(nouns.size() + " nouns in text" + "\n");
+        sb.append(numMetachains + " " + numChains + " " + numStrongChains + "\n");
+        sb.append(avgLength + " " + longestChain + " " + stdevScore + "\n");
+        return sb.toString();
     }
 
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("fox_dominion_tagged.txt");
-        System.out.println();
-        System.out.println("Nouns: " + test.nouns.size());
+        SilberMcCoy test = new SilberMcCoy("NYT_articles/india_tagged.txt");
+        System.out.println(test.dataToString());
     }
 }

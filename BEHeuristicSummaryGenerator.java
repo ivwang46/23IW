@@ -16,11 +16,25 @@ public class BEHeuristicSummaryGenerator {
         List<Metachain> strongChains = chainsAlgo.getStrongChains();
 
         for (Metachain c: strongChains) {
-            int sentIndex = c.chain.get(0).getSentNum() - 1;
-            if (sentIndex < textSentences.size() && !checked[sentIndex]) {
-                System.out.println(textSentences.get(sentIndex));
-                // System.out.print(" ");
-                checked[sentIndex] = true;
+            int nodeIndex = 0;
+
+            while (true) {
+                if (nodeIndex < c.getSize()) {
+                    int sentIndex = c.chain.get(nodeIndex).getSentNum() - 1;
+                    if (sentIndex > textSentences.size()) {
+                        nodeIndex++;
+                    } else {
+                        if (checked[sentIndex]) {
+                            nodeIndex++;
+                        } else {
+                            System.out.println(textSentences.get(sentIndex));
+                            checked[sentIndex] = true;
+                            break;
+                        }
+                    }
+                } else {
+                    break;
+                }
             }
         }
 
@@ -64,7 +78,7 @@ public class BEHeuristicSummaryGenerator {
     }
 
     public static void main(String[] args) {
-        BEHeuristicSummaryGenerator summaryGenerator = new BEHeuristicSummaryGenerator("history_opera_tagged.txt");
+        BEHeuristicSummaryGenerator summaryGenerator = new BEHeuristicSummaryGenerator("NYT_articles/india_tagged.txt");
 
     }
 }
