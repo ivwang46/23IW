@@ -78,7 +78,7 @@ public class BEHeuristicSummaryGenerator {
     }
 
     public static void main(String[] args) {
-        BEHeuristicSummaryGenerator summaryGenerator = new BEHeuristicSummaryGenerator("NYT_articles/india_tagged.txt");
+        BEHeuristicSummaryGenerator summaryGenerator = new BEHeuristicSummaryGenerator("NYT_articles/feral_tagged.txt");
 
     }
 }

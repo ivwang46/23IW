@@ -15,8 +15,6 @@ public class MetaWordNode {
     public double score;
     public int chainNum;
 
-
-
     public MetaWordNode(int sentNum, IWord word) {
         this.sentNum = sentNum;
         this.word = word;
@@ -101,22 +99,6 @@ public class MetaWordNode {
             IWordID wid1 = word1.getWordIDs().get(0);
             IWordID wid2 = word2.getWordIDs().get(0);
             System.out.println(wid1.getSynsetID().equals(wid2.getSynsetID()));
-
-//            List<IWordID> coffeeIDS = word1.getWordIDs();
-//            List<IWordID> latteIDs = word2.getWordIDs();
-//            for (IWordID c: coffeeIDS) {
-//                for (IWordID l: latteIDs) {
-//                    System.out.println(c.getLemma() + " / " + l.getLemma());
-//                    IWord coffee = dict.getWord(c);
-//                    IWord latte = dict.getWord(l);
-//                    MetaWordNode cn = new MetaWordNode(0, coffee);
-//                    MetaWordNode ln = new MetaWordNode(0, latte);
-//                    System.out.println(coffee.getSynset().getID() + " / " + latte.getSynset().getID());
-//                    System.out.println("SYNONYM: " + cn.isSynonym(latte));
-//                    System.out.println("HYPERNYM: " + ((cn.isHypernym(dict, latte) || (ln.isHypernym(dict, coffee)))));
-//                    System.out.println();
-//                }
-//            }
         } catch (IOException e) {
             System.out.println("ERR: " + e.getMessage());
         }

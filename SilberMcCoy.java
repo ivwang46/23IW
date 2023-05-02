@@ -28,6 +28,7 @@ public class SilberMcCoy {
     private double stdevScore = Double.NEGATIVE_INFINITY;
     private final int longestChain;
     private final double avgLength;
+    private double stdevLength;
 
     public SilberMcCoy(String inputFile) {
         initializeAlgo();
@@ -399,11 +400,14 @@ public class SilberMcCoy {
 
     private void computeFinalChains() {
         double totalScores = 0.0;
+        double totalLength = 0.0;
         for (Metachain c: metachains) {
+            totalLength += Math.pow(c.getSize() - avgLength, 2);
             totalScores += c.strengthScore;
         }
         computeMean(totalScores);
         computeScoreStdev();
+        stdevLength = Math.sqrt(totalLength/metachains.size());
     }
 
     private void computeScoreStdev() {
@@ -418,6 +422,14 @@ public class SilberMcCoy {
         avgScore = totalScores/metachains.size();
     }
 
+    public double getStdevLength() {
+        return stdevLength;
+    }
+
+    public double getAvgLength() {
+        return avgLength;
+    }
+
     public String dataToString() {
         StringBuilder sb = new StringBuilder();
         sb.append(nouns.size() + " nouns in text" + "\n");
@@ -427,7 +439,7 @@ public class SilberMcCoy {
     }
 
     public static void main(String[] args) {
-        SilberMcCoy test = new SilberMcCoy("NYT_articles/india_tagged.txt");
+        SilberMcCoy test = new SilberMcCoy("NYT_articles/tswift_tagged.txt");
         System.out.println(test.dataToString());
     }
 }
